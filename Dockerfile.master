@@ -15,7 +15,9 @@ RUN git clone --depth 1 --branch "${LLAMA_CPP_VERSION}" \
     https://github.com/ggml-org/llama.cpp.git .
 
 # Enable RPC backend and compile the server
-RUN cmake -B build -DGGML_RPC=ON -DBUILD_SHARED_LIBS=OFF && \
+ARG TARGETARCH
+RUN NATIVE_FLAG=ON && [ "$TARGETARCH" != "amd64" ] && NATIVE_FLAG=OFF; \
+    cmake -B build -DGGML_RPC=ON -DGGML_NATIVE=${NATIVE_FLAG} -DBUILD_SHARED_LIBS=OFF && \
     cmake --build build --config Release --target llama-server llama-cli -j$(nproc)
 
 # Stage 2: Create a clean runtime image
