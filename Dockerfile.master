@@ -1,35 +1,39 @@
-FROM debian:bookworm-slim AS build
+# Stage 1: Build from source
+FROM debian:bookworm-slim AS builder
 
 ARG LLAMA_CPP_VERSION=master
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates git cmake make g++ libcurl4-openssl-dev \
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates build-essential cmake git \
     && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /app
+
+# Clone the repository
 RUN git clone --depth 1 --branch "${LLAMA_CPP_VERSION}" \
-    https://github.com/ggml-org/llama.cpp.git /src
+    https://github.com/ggml-org/llama.cpp.git .
 
-WORKDIR /src
+# Enable RPC backend and compile the server
+RUN cmake -B build -DGGML_RPC=ON -DBUILD_SHARED_LIBS=OFF && \
+    cmake --build build --config Release --target llama-server llama-cli -j$(nproc)
 
-RUN cmake -B build \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DGGML_RPC=ON \
-    -DLLAMA_CURL=ON \
-    -DLLAMA_BUILD_SERVER=ON \
-    -DLLAMA_BUILD_EXAMPLES=ON \
-    -DLLAMA_BUILD_TESTS=OFF \
-    && cmake --build build --target llama-server llama-cli -j$(nproc)
-
+# Stage 2: Create a clean runtime image
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates libgomp1 libcurl4 \
+# Install runtime dependency
+RUN apt-get update && apt-get install -y \
+    ca-certificates libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /src/build/bin/llama-server /usr/local/bin/llama-server
-COPY --from=build /src/build/bin/llama-cli /usr/local/bin/llama-cli
+WORKDIR /app
 
+# Copy the compiled binaries from the builder stage
+COPY --from=builder /app/build/bin/llama-server /app/llama-server
+COPY --from=builder /app/build/bin/llama-cli /app/llama-cli
+
+# Set the entrypoint
 EXPOSE 8080
 
-ENTRYPOINT ["llama-server"]
+ENTRYPOINT ["/app/llama-server"]
 CMD ["--host", "0.0.0.0", "--port", "8080"]
