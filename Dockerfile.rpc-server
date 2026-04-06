@@ -3,7 +3,7 @@ FROM debian:bookworm-slim AS build
 ARG LLAMA_CPP_VERSION=master
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git cmake make g++ \
+    ca-certificates git cmake make g++ \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --depth 1 --branch "${LLAMA_CPP_VERSION}" \
@@ -23,7 +23,7 @@ RUN cmake -B build \
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
+    ca-certificates libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /src/build/bin/rpc-server /usr/local/bin/rpc-server
