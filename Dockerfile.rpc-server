@@ -1,0 +1,34 @@
+FROM debian:bookworm-slim AS build
+
+ARG LLAMA_CPP_VERSION=master
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git cmake make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 --branch "${LLAMA_CPP_VERSION}" \
+    https://github.com/ggml-org/llama.cpp.git /src
+
+WORKDIR /src
+
+RUN cmake -B build \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DGGML_RPC=ON \
+    -DLLAMA_CURL=OFF \
+    -DLLAMA_BUILD_SERVER=OFF \
+    -DLLAMA_BUILD_EXAMPLES=OFF \
+    -DLLAMA_BUILD_TESTS=OFF \
+    && cmake --build build --target rpc-server -j$(nproc)
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /src/build/bin/rpc-server /usr/local/bin/rpc-server
+
+EXPOSE 50052
+
+ENTRYPOINT ["rpc-server"]
+CMD ["--host", "0.0.0.0", "--port", "50052"]
